@@ -1,0 +1,62 @@
+name: Build, Scan (Trivy+Grype), SBOM and Push
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  FULL_IMAGE: quay.io/doriutefus/shiftleft_albertromero
+
+jobs:
+  build-secure-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🧩 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🔧 Build container image
+        run: |
+          docker build -t $FULL_IMAGE .
+      
+      - name: 🔍 Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.FULL_IMAGE }}
+          severity: HIGH,CRITICAL
+          exit-code: 1  # Falla si hay riesgos críticos
+          ignore-unfixed: true
+
+      - name: 🧾 Generate SBOM with Syft (syft-json format)
+        run: |
+          docker run --rm \
+          -v /var/run/docker.sock:/var/run/docker.sock \
+          -v "$PWD":/work \
+          anchore/syft:latest "$FULL_IMAGE" -o syft-json > sbom.syft.json
+          test -s sbom.syft.json && echo "SBOM created: sbom.syft.json"
+      
+      - name: 📤 Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-syft-json
+          path: sbom.syft.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: 🛡 Vulnerability scan (Grype on SBOM)
+        run: |
+          docker run --rm \
+          -v "$PWD":/work \
+          anchore/grype:latest /work/sbom.syft.json \
+          --fail-on high \
+          --only-fixed=false \
+          --add-cpes-if-none
+
+      - name: 🔑 Login to Quay.io
+        run: |
+          docker login quay.io -u "${{ secrets.QUAY_USER }}" -p "${{ secrets.QUAY_PASSWORD }}"
+
+      - name: 🚀 Push image to Quay.io
+        run: |
+          docker push $FULL_IMAGE
