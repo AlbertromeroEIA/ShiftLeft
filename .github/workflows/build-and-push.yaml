@@ -6,7 +6,7 @@ on:
       - main
 
 env:
-  FULL_IMAGE: quay.io/doriutefus/shiftleft_albertromero
+  FULL_IMAGE: quay.io/doriutefus/shiftleft_albertromero:SBOM-Dockerfilebasic
 
 jobs:
   build-secure-pipeline:
@@ -29,30 +29,30 @@ jobs:
           ignore-unfixed: true
 
       # 🧾 Generate SBOM with Syft (syft-json format)
-      #- name: 🧾 Generate SBOM with Syft (syft-json format)
-       # run: |
-        #  docker run --rm \
-         # -v /var/run/docker.sock:/var/run/docker.sock \
-          #-v "$PWD":/work \
-          #anchore/syft:latest "$FULL_IMAGE" -o syft-json > sbom.syft.json
-          #test -s sbom.syft.json && echo "SBOM created: sbom.syft.json"
+      - name: 🧾 Generate SBOM with Syft (syft-json format)
+        run: |
+          docker run --rm \
+          -v /var/run/docker.sock:/var/run/docker.sock \
+          -v "$PWD":/work \
+          anchore/syft:latest "$FULL_IMAGE" -o syft-json > sbom.syft.json
+          test -s sbom.syft.json && echo "SBOM created: sbom.syft.json"
       
-     # - name: 📤 Upload SBOM artifact
-      #  uses: actions/upload-artifact@v4
-       # with:
-        #  name: sbom-syft-json
-         # path: sbom.syft.json
-          #if-no-files-found: error
-          #retention-days: 14
+      - name: 📤 Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-syft-json
+          path: sbom.syft.json
+          if-no-files-found: error
+          retention-days: 14
       # 🛡 Evaluate SBOM with Grype (fail build on HIGH or CRITICAL vulns)
-      #- name: 🛡 Vulnerability scan (Grype on SBOM)
-       # run: |
-        #  docker run --rm \
-         # -v "$PWD":/work \
-          #anchore/grype:latest /work/sbom.syft.json \
-          #--fail-on high \
-          #--only-fixed=false \
-          #--add-cpes-if-none
+      - name: 🛡 Vulnerability scan (Grype on SBOM)
+        run: |
+          docker run --rm \
+          -v "$PWD":/work \
+          anchore/grype:latest /work/sbom.syft.json \
+          --fail-on critical \
+          --only-fixed=false \
+          --add-cpes-if-none
 
       - name: 🔑 Login to Quay.io
         run: |
