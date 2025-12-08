@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+
 env:
   FULL_IMAGE: quay.io/doriutefus/shiftleft_albertromero:SBOM-Dockerfilebasic
 
@@ -36,7 +39,16 @@ jobs:
           -v "$PWD":/work \
           anchore/syft:latest "$FULL_IMAGE" -o syft-json > sbom.syft.json
           test -s sbom.syft.json && echo "SBOM created: sbom.syft.json"
-      
+
+      - name: 💾 Commit & Push SBOM to Repo
+        run: |
+          git config --global user.name "Albert Romero Bot"
+          git config --global user.email "actions@github.com"
+          git add sbom.syft.json
+          # El '|| echo' evita que falle si el SBOM no ha cambiado
+          git commit -m "Auto-update SBOM for run $GITHUB_RUN_NUMBER [skip ci]" || echo "No changes to commit"
+          git push
+
       - name: 📤 Upload SBOM artifact
         uses: actions/upload-artifact@v4
         with:
